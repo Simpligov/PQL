@@ -7,13 +7,18 @@ using Irony.Parsing;
 
 namespace Pql.ExpressionEngine.Interfaces
 {
+    using Exceptions;
+
     /// <summary>
     /// Shared utilities to handle evaluation of constant expressions. 
     /// </summary>
     public static class ConstantHelper
     {
-        private static readonly ConcurrentDictionary<Tuple<ExpressionType, Type>, Tuple<object, MethodInfo>> UnaryOperators = new ConcurrentDictionary<Tuple<ExpressionType, Type>, Tuple<object, MethodInfo>>();
-        private static readonly ConcurrentDictionary<Tuple<ExpressionType, Type, Type>, Tuple<object, MethodInfo>> BinaryOperators = new ConcurrentDictionary<Tuple<ExpressionType, Type, Type>, Tuple<object, MethodInfo>>();
+        private static readonly ConcurrentDictionary<Tuple<ExpressionType, Type>, Tuple<object, MethodInfo>> UnaryOperators =
+            new ConcurrentDictionary<Tuple<ExpressionType, Type>, Tuple<object, MethodInfo>>();
+
+        private static readonly ConcurrentDictionary<Tuple<ExpressionType, Type, Type>, Tuple<object, MethodInfo>> BinaryOperators =
+            new ConcurrentDictionary<Tuple<ExpressionType, Type, Type>, Tuple<object, MethodInfo>>();
 
         /// <summary>
         /// If all arguments are constant expressions, evaluates <paramref name="methodInfo"/> and returns result wrapped in <see cref="ConstantExpression"/>.
@@ -41,18 +46,26 @@ namespace Pql.ExpressionEngine.Interfaces
                     }
                 }
 
-                var instance = methodInfo.IsStatic ? null : ((ConstantExpression) args[0]).Value;
+                var instance = methodInfo.IsStatic ? null : ((ConstantExpression)args[0]).Value;
                 var skip = instance == null ? 0 : 1;
                 object value;
                 try
                 {
-                    value = methodInfo.Invoke(instance, args.Skip(skip).Select(x => ((ConstantExpression) x).Value).ToArray());
+                    value = methodInfo.Invoke(instance, args.Skip(skip).Select(x => ((ConstantExpression)x).Value).ToArray());
                 }
                 catch (TargetInvocationException e)
                 {
-                    if (e.InnerException == null) throw;
-                    throw e.InnerException;
+                    if (e.InnerException == null)
+                        throw new FormulaEngineException(
+                            e.Message + " [" + string.Join(';', args.Select(x => ((ConstantExpression)x).Value)) + ']');
+
+                    throw new FormulaEngineException(
+                        e.InnerException.Message + " [" + string.Join(';', args.Select(x => ((ConstantExpression)x).Value)) + ']',
+                        e.InnerException);
+
+                    //return Expression.Constant(Double.NaN);
                 }
+
                 return Expression.Constant(value, methodInfo.ReturnType);
             }
             catch (InvalidOperationException e)
@@ -154,13 +167,14 @@ namespace Pql.ExpressionEngine.Interfaces
                 object value;
                 try
                 {
-                    value = constructorInfo.Invoke(args.Select(x => ((ConstantExpression) x).Value).ToArray());
+                    value = constructorInfo.Invoke(args.Select(x => ((ConstantExpression)x).Value).ToArray());
                 }
                 catch (TargetInvocationException e)
                 {
                     if (e.InnerException == null) throw;
                     throw e.InnerException;
                 }
+
                 return Expression.Constant(value);
             }
             catch (InvalidOperationException e)
@@ -173,7 +187,8 @@ namespace Pql.ExpressionEngine.Interfaces
         /// If <paramref name="left"/> and <paramref name="right"/> are constant expressions, evaluates operator <paramref name="op"/> and returns result wrapped in <see cref="ConstantExpression"/>.
         /// Otherwise, returns an expression that will evaluate given method at run-time.
         /// </summary>
-        public static Expression TryEvalConst(ParseTreeNode root, Expression left, Expression right, ExpressionType op, Type returnType = null)
+        public static Expression TryEvalConst(ParseTreeNode root, Expression left, Expression right, ExpressionType op,
+            Type returnType = null)
         {
             if (left == null)
             {
@@ -184,11 +199,12 @@ namespace Pql.ExpressionEngine.Interfaces
             {
                 throw new ArgumentNullException("right");
             }
+
             try
             {
                 return !(left is ConstantExpression x) || !(right is ConstantExpression y)
-                           ? (Expression)Expression.MakeBinary(op, left, right)
-                           : EvalConst(root, x, y, op, returnType);
+                    ? (Expression)Expression.MakeBinary(op, left, right)
+                    : EvalConst(root, x, y, op, returnType);
             }
             catch (InvalidOperationException e)
             {
@@ -199,7 +215,8 @@ namespace Pql.ExpressionEngine.Interfaces
         /// <summary>
         /// Evaluates operator <paramref name="op"/> and returns result wrapped in <see cref="ConstantExpression"/>.
         /// </summary>
-        public static ConstantExpression EvalConst(ParseTreeNode root, ConstantExpression left, ConstantExpression right, ExpressionType op, Type returnType)
+        public static ConstantExpression EvalConst(ParseTreeNode root, ConstantExpression left, ConstantExpression right, ExpressionType op,
+            Type returnType)
         {
             if (left == null)
             {
@@ -214,28 +231,31 @@ namespace Pql.ExpressionEngine.Interfaces
             try
             {
                 var method = BinaryOperators.GetOrAdd(
-                    new Tuple<ExpressionType, Type, Type>(op, left.Type, 
-                        (op == ExpressionType.Convert || op == ExpressionType.ConvertChecked) ? (Type) right.Value : right.Type), tuple =>
+                    new Tuple<ExpressionType, Type, Type>(op, left.Type,
+                        (op == ExpressionType.Convert || op == ExpressionType.ConvertChecked) ? (Type)right.Value : right.Type), tuple =>
+                    {
+                        Delegate func;
+                        if (op == ExpressionType.Convert || op == ExpressionType.ConvertChecked)
                         {
-                            Delegate func;
-                            if (op == ExpressionType.Convert || op == ExpressionType.ConvertChecked)
-                            {
-                                var arg1 = Expression.Parameter(tuple.Item2);
-                                var type = tuple.Item3;
-                                var expr = Expression.MakeUnary(tuple.Item1, arg1, type);
-                                func = Expression.Lambda(Expression.GetFuncType(arg1.Type, type), expr, arg1).Compile();
-                            }
-                            else
-                            {
-                                var arg1 = Expression.Parameter(tuple.Item2);
-                                var arg2 = Expression.Parameter(tuple.Item3);
-                                var expr = Expression.MakeBinary(tuple.Item1, arg1, arg2);
-                                func = Expression.Lambda(Expression.GetFuncType(arg1.Type, arg2.Type, expr.Type), expr, arg1, arg2).Compile();
-                            }
-                            return new Tuple<object, MethodInfo>(func, ReflectionHelper.GetOrAddMethodAny(func.GetType(), "Invoke"));
-                        });
+                            var arg1 = Expression.Parameter(tuple.Item2);
+                            var type = tuple.Item3;
+                            var expr = Expression.MakeUnary(tuple.Item1, arg1, type);
+                            func = Expression.Lambda(Expression.GetFuncType(arg1.Type, type), expr, arg1).Compile();
+                        }
+                        else
+                        {
+                            var arg1 = Expression.Parameter(tuple.Item2);
+                            var arg2 = Expression.Parameter(tuple.Item3);
+                            var expr = Expression.MakeBinary(tuple.Item1, arg1, arg2);
+                            func = Expression.Lambda(Expression.GetFuncType(arg1.Type, arg2.Type, expr.Type), expr, arg1, arg2).Compile();
+                        }
 
-                var args = (op == ExpressionType.Convert || op == ExpressionType.ConvertChecked) ? new[] {left.Value} : new[] {left.Value, right.Value};
+                        return new Tuple<object, MethodInfo>(func, ReflectionHelper.GetOrAddMethodAny(func.GetType(), "Invoke"));
+                    });
+
+                var args = (op == ExpressionType.Convert || op == ExpressionType.ConvertChecked)
+                    ? new[] { left.Value }
+                    : new[] { left.Value, right.Value };
                 object value;
                 try
                 {
@@ -246,6 +266,7 @@ namespace Pql.ExpressionEngine.Interfaces
                     if (e.InnerException == null) throw;
                     throw e.InnerException;
                 }
+
                 return Expression.Constant(value, returnType ?? method.Item2.ReturnType);
             }
             catch (InvalidOperationException e)
@@ -266,7 +287,9 @@ namespace Pql.ExpressionEngine.Interfaces
 
             try
             {
-                return !(left is ConstantExpression constant) ? Expression.MakeUnary(op, left, returnType ?? left.Type) : (Expression)EvalConst(root, constant, op, returnType);
+                return !(left is ConstantExpression constant)
+                    ? Expression.MakeUnary(op, left, returnType ?? left.Type)
+                    : (Expression)EvalConst(root, constant, op, returnType);
             }
             catch (InvalidOperationException e)
             {
@@ -295,46 +318,48 @@ namespace Pql.ExpressionEngine.Interfaces
                 {
                     var method = BinaryOperators.GetOrAdd(
                         new Tuple<ExpressionType, Type, Type>(op, left.Type, returnType), tuple =>
-                            {
-                                var arg1 = Expression.Parameter(tuple.Item2);
-                                var expr = Expression.MakeUnary(tuple.Item1, arg1, tuple.Item3);
-                                var func = Expression.Lambda(Expression.GetFuncType(arg1.Type, expr.Type), expr, arg1).Compile();
-                                return new Tuple<object, MethodInfo>(func, ReflectionHelper.GetOrAddMethodAny(func.GetType(), "Invoke"));
-                            });
+                        {
+                            var arg1 = Expression.Parameter(tuple.Item2);
+                            var expr = Expression.MakeUnary(tuple.Item1, arg1, tuple.Item3);
+                            var func = Expression.Lambda(Expression.GetFuncType(arg1.Type, expr.Type), expr, arg1).Compile();
+                            return new Tuple<object, MethodInfo>(func, ReflectionHelper.GetOrAddMethodAny(func.GetType(), "Invoke"));
+                        });
 
                     object value;
                     try
                     {
-                        value = method.Item2.Invoke(method.Item1, new[] {left.Value});
+                        value = method.Item2.Invoke(method.Item1, new[] { left.Value });
                     }
                     catch (TargetInvocationException e)
                     {
                         if (e.InnerException == null) throw;
                         throw e.InnerException;
                     }
+
                     return Expression.Constant(value, returnType);
                 }
                 else
                 {
                     var method = UnaryOperators.GetOrAdd(
                         new Tuple<ExpressionType, Type>(op, left.Type), tuple =>
-                            {
-                                var arg1 = Expression.Parameter(tuple.Item2);
-                                var expr = Expression.MakeUnary(tuple.Item1, arg1, null);
-                                var func = Expression.Lambda(Expression.GetFuncType(arg1.Type, expr.Type), expr, arg1).Compile();
-                                return new Tuple<object, MethodInfo>(func, ReflectionHelper.GetOrAddMethodAny(func.GetType(), "Invoke"));
-                            });
+                        {
+                            var arg1 = Expression.Parameter(tuple.Item2);
+                            var expr = Expression.MakeUnary(tuple.Item1, arg1, null);
+                            var func = Expression.Lambda(Expression.GetFuncType(arg1.Type, expr.Type), expr, arg1).Compile();
+                            return new Tuple<object, MethodInfo>(func, ReflectionHelper.GetOrAddMethodAny(func.GetType(), "Invoke"));
+                        });
 
                     object value;
                     try
                     {
-                        value = method.Item2.Invoke(method.Item1, new[] {left.Value});
+                        value = method.Item2.Invoke(method.Item1, new[] { left.Value });
                     }
                     catch (TargetInvocationException e)
                     {
                         if (e.InnerException == null) throw;
                         throw e.InnerException;
                     }
+
                     return Expression.Constant(value, returnType);
                 }
             }

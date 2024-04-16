@@ -37,13 +37,13 @@ namespace Pql.ExpressionEngine.Interfaces
         /// MethodInfo for String.Concat.
         /// </summary>
         public static readonly MethodInfo StringConcat = Require(
-            typeof (string), "Concat", BindingFlags.Static | BindingFlags.Public, new[] {typeof (string), typeof (string)});
+            typeof(string), "Concat", BindingFlags.Static | BindingFlags.Public, new[] { typeof(string), typeof(string) });
 
         /// <summary>
         /// MethodInfo for String.IsNullOrEmpty.
         /// </summary>
         public static readonly MethodInfo StringIsNullOrEmpty = Require(
-            typeof (string), "IsNullOrEmpty", BindingFlags.Static | BindingFlags.Public, new[] {typeof (string) });
+            typeof(string), "IsNullOrEmpty", BindingFlags.Static | BindingFlags.Public, new[] { typeof(string) });
 
         /// <summary>
         /// MethodInfo for String.StartsWith.
@@ -67,25 +67,26 @@ namespace Pql.ExpressionEngine.Interfaces
         /// MethodInfo for StringComparer.Compare.
         /// </summary>
         public static readonly MethodInfo StringComparerCompare = Require(
-            typeof (StringComparer), "Compare", BindingFlags.Instance | BindingFlags.Public, new[] {typeof (string), typeof (string)});
+            typeof(StringComparer), "Compare", BindingFlags.Instance | BindingFlags.Public, new[] { typeof(string), typeof(string) });
 
         /// <summary>
         /// MethodInfo for StringComparer.Equals.
         /// </summary>
         public static readonly MethodInfo StringComparerEquals = Require(
-            typeof (StringComparer), "Equals", BindingFlags.Instance | BindingFlags.Public, new[] {typeof (string), typeof (string)});
+            typeof(StringComparer), "Equals", BindingFlags.Instance | BindingFlags.Public, new[] { typeof(string), typeof(string) });
 
         /// <summary>
         /// MethodInfo for ReflectionHelper.EnumerateValues.
         /// </summary>
         public static readonly MethodInfo EnumerateValues = Require(
-            typeof (ExpressionTreeExtensions), "EnumerateValues", BindingFlags.Static | BindingFlags.Public, null);
+            typeof(ExpressionTreeExtensions), "EnumerateValues", BindingFlags.Static | BindingFlags.Public, null);
 
         /// <summary>
         /// MethodInfo for ReflectionHelper.EnumerateValues.
         /// </summary>
         public static readonly MethodInfo DateTimeParseExact = Require(
-            typeof (DateTime), "ParseExact", BindingFlags.Static | BindingFlags.Public, new[] {typeof (string), typeof (string), typeof(IFormatProvider)});
+            typeof(DateTime), "ParseExact", BindingFlags.Static | BindingFlags.Public,
+            new[] { typeof(string), typeof(string), typeof(IFormatProvider) });
 
         /// <summary>
         /// Reflects on a method, caches found information. Assumes number of arguments being zero.
@@ -120,13 +121,13 @@ namespace Pql.ExpressionEngine.Interfaces
         public static MethodInfo GetOrAddMethod1(Type type, string methodName, Type type1)
         {
             return Methods.GetOrAdd(
-                new Tuple<Type, string>(type, methodName + type1.GetHashCode()), 
-                tuple => Require(type, methodName, BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public, new [] {type1}));
+                new Tuple<Type, string>(type, methodName + type1.GetHashCode()),
+                tuple => Require(type, methodName, BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public, new[] { type1 }));
         }
 
         private static MethodInfo Require(Type type, string methodName, BindingFlags bindingFlags, Type[] argTypes)
         {
-            var methodInfo = argTypes == null 
+            var methodInfo = argTypes == null
                 ? type.GetMethod(methodName, bindingFlags)
                 : type.GetMethod(methodName, bindingFlags, null, argTypes, null);
 
@@ -138,6 +139,6 @@ namespace Pql.ExpressionEngine.Interfaces
             return methodInfo;
         }
 
-        private readonly static ConcurrentDictionary<Tuple<Type, string>, MethodInfo> Methods = new ConcurrentDictionary<Tuple<Type, string>, MethodInfo>();
+        private static readonly ConcurrentDictionary<Tuple<Type, string>, MethodInfo> Methods = new();
     }
 }
