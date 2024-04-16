@@ -13,8 +13,8 @@ namespace Pql.ExpressionEngine.Interfaces
     /// </summary>
     public static class ExpressionTreeExtensions
     {
-        private static readonly List<Type> Numerics = new List<Type>
-            {
+        private static readonly HashSet<Type> Numerics = new()
+        {
                 typeof (SByte),
                 typeof (Byte),
                 typeof (Int16),
@@ -28,8 +28,8 @@ namespace Pql.ExpressionEngine.Interfaces
                 typeof (Decimal)
             };
         
-        private static readonly List<Type> Integers = new List<Type>
-            {
+        private static readonly HashSet<Type> Integers = new()
+        {
                 typeof (Byte),
                 typeof (SByte),
                 typeof (Int16),
@@ -45,7 +45,6 @@ namespace Pql.ExpressionEngine.Interfaces
         /// </summary>
         public struct VoidTypeMarker
         {
-             
         }
 
         /// <summary>

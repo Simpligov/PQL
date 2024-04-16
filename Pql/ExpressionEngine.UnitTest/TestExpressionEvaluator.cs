@@ -522,7 +522,13 @@ namespace Pql.ExpressionEngine.UnitTest
             
             Assert.AreEqual("1" + 2L, concat("1", 2L));
         }
-        
+
+        [TestMethod]
+        public void NullConvert()
+        {
+            Assert.AreEqual(0, Eval<Int32>("convert('', 'Int32')"));
+        }
+
         [TestMethod]
         public void CheckTypeCasts()
         {

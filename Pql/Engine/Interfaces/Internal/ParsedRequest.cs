@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Linq.Expressions;
-using Irony.Parsing;
 using Pql.ClientDriver;
 using Pql.Engine.Interfaces.Services;
 
